@@ -1,0 +1,153 @@
+heat_template_version: 2013-05-23 
+description: "Heat demo template for wait conditions"
+
+parameters: 
+  instance_type: 
+    default: m1.small
+    description: "Type of instance (flavor) to be used"
+    label: "Instance Type"
+    type: string
+  key_name: 
+    description: "Name of key-pair to be used for compute instance"
+    label: "Key Name"
+    type: string
+
+resources: 
+  service1: 
+    type: "OS::Nova::Server"
+    properties: 
+      flavor: m1.medium
+      image: ubuntu_cloud
+      key_name: 
+        get_param: key_name
+      user_data: 
+        str_replace: 
+          template: |
+              #!/bin/bash
+              curl -X PUT -H 'Content-Type:application/json' \
+                   -d '{"Status" : "SUCCESS","Reason" : "Configuration OK","UniqueId" : "SERVICE1","Data" : "Service1 Configured."}' \
+                   "$wait_handle$"
+          params: 
+            $wait_handle$: 
+              get_resource: service1_wait_handle
+
+  service1_floating: 
+    type: "AWS::EC2::EIP"
+
+  service1_floating_association: 
+    type: "AWS::EC2::EIPAssociation"
+    properties: 
+      EIP: 
+        Ref: service1_floating
+      InstanceId: 
+        Ref: service1
+
+  service1_wait: 
+    type: "AWS::CloudFormation::WaitCondition"
+    depends_on: service1
+    properties: 
+      Handle: 
+        get_resource: service1_wait_handle
+      Timeout: 1000
+
+  service1_wait_handle: 
+    type: "AWS::CloudFormation::WaitConditionHandle"
+
+  service2: 
+    type: "OS::Nova::Server"
+    depends_on: service1_wait
+    properties: 
+      flavor: 
+        get_param: instance_type
+      image: ubuntu_cloud
+      key_name: 
+        get_param: key_name
+      user_data: 
+        str_replace: 
+          template: |
+              #!/bin/bash
+              curl -X PUT -H 'Content-Type:application/json' \
+                -d '{"Status" : "SUCCESS","Reason" : "Configuration OK","UniqueId" : "SERVICE2","Data" : "Service2 Configured."}' \
+                "$wait_handle$"
+          params: 
+            $data$: 
+              get_attr: 
+                - service1_wait
+                - Data
+            $wait_handle$: 
+              get_resource: service2_wait_handle
+        
+  service2_floating: 
+    type: "AWS::EC2::EIP"
+
+  service2_floating_association: 
+    type: "AWS::EC2::EIPAssociation"
+    properties: 
+      EIP: 
+        Ref: service2_floating
+      InstanceId: 
+        Ref: service2
+		
+  service2_wait: 
+    type: "AWS::CloudFormation::WaitCondition"
+    depends_on: service2
+    properties: 
+      Handle: 
+        get_resource: service2_wait_handle
+      Timeout: 1000
+
+  service2_wait_handle: 
+    type: "AWS::CloudFormation::WaitConditionHandle"
+
+  service3:
+    type: "OS::Nova::Server"
+    depends_on: service2_wait
+    properties:
+      flavor: m1.medium
+      image: ubuntu_cloud
+      key_name: 
+        get_param: key_name
+      user_data: 
+        str_replace: 
+          template: |
+              #!/bin/bash
+              curl -X PUT -H 'Content-Type:application/json' \
+                -d '{"Status" : "SUCCESS","Reason" : "Configuration OK","UniqueId" : "SERVICE3","Data" : "Service3 Configured."}' \
+                "$wait_handle$"
+          params: 
+            $data$: 
+              get_attr: 
+                - service2_wait
+                - Data
+            $wait_handle$: 
+              get_resource: service3_wait_handle
+              
+  service3_floating: 
+    type: "AWS::EC2::EIP"
+
+  service3_floating_association: 
+    type: "AWS::EC2::EIPAssociation"
+    properties: 
+      EIP: 
+        Ref: service3_floating
+      InstanceId: 
+        Ref: service3
+        
+  service3_wait: 
+    type: "AWS::CloudFormation::WaitCondition"
+    depends_on: service3
+    properties: 
+      Handle: 
+        get_resource: service3_wait_handle
+      Timeout: 1000
+
+  service3_wait_handle: 
+    type: "AWS::CloudFormation::WaitConditionHandle"
+
+outputs: 
+  service2_ip: 
+    description: "IP Service 2"
+    value: { Ref: service2_floating }
+  service3_ip:
+    description: "IP Service 3"
+    value: { Ref: service3_floating }
